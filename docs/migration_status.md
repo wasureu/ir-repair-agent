@@ -55,22 +55,26 @@ Completed modules:
 
 ```text
 ir_repair_agent/audit/direction.py
+ir_repair_agent/audit/equivalence.py
+ir_repair_agent/audit/self_diagnosis.py
+ir_repair_agent/memory_features.py
 ir_repair_agent/verification.py
 ```
 
 The legacy auditor currently delegates multi-source objective-direction
-evidence and solver-regression checks to these package modules.
+evidence, equivalence verification, strict equivalence-result validation, and
+solver-regression checks to these package modules. The three-run consensus
+self-diagnosis and its independent verification are also delegated.
+Legacy repair-memory error compression and structural/skeleton features now
+delegate to `memory_features.py`.
 
 Still planned:
 
 ```text
  audit/hybrid_auditor.py
- audit/equivalence.py
-audit/self_diagnosis.py
 repair/pipeline.py
 repair/patcher.py
 repair/gate.py
-memory/features.py
 memory/admission.py
 ```
 

@@ -34,6 +34,12 @@ from .execution_evidence import (
     safe_float,
 )
 from .memory import RepairCase, SqliteRepairMemory
+from .memory_features import (
+    constraint_skeleton,
+    memory_error_pattern,
+    structural_skeletons,
+    structural_tokens,
+)
 from .repair import RepairEngine, RepairOutcome, RepairPolicy, RepairRequest
 
 __all__ = [
@@ -70,6 +76,11 @@ __all__ = [
     "assess_edit",
     "compare_runs",
     "collect_gurobi_evidence",
+    "constraint_skeleton",
     "diagnosis_from_validation",
+    "memory_error_pattern",
     "safe_float",
+    "structural_skeletons",
+    "structural_tokens",
 ]
+

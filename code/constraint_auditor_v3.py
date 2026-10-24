@@ -20,6 +20,20 @@ from ir_repair_agent.audit.direction import (
     report_objective_direction as _package_report_direction,
     rule_direction_evidence as _package_rule_direction,
 )
+from ir_repair_agent.audit.equivalence import (
+    equivalence_ok as _package_equivalence_ok,
+    verify_equivalence as _package_verify_equivalence,
+)
+from ir_repair_agent.audit.self_diagnosis import (
+    self_diagnose as _package_self_diagnose,
+    verify_self_diagnosis as _package_verify_self_diagnosis,
+)
+from ir_repair_agent.memory_features import (
+    constraint_skeleton as _package_constraint_skeleton,
+    memory_error_pattern as _package_memory_error_pattern,
+    structural_skeletons as _package_structural_skeletons,
+    structural_tokens as _package_structural_tokens,
+)
 from ir_repair_agent.verification import regression_issues as _package_regression
 
 # 从 hints 模块导入领域知识字典
@@ -199,7 +213,7 @@ def _log_gate_decision(question_id: str, problem_class: str,
 # 0.5 跨题记忆系统 RepairMemory（线程安全，零第三方依赖）
 # ============================================================
 
-def _memory_error_pattern(text: str) -> str:
+def _legacy_memory_error_pattern(text: str) -> str:
     """把冗长的 audit/exec 报告压成紧凑、可检索的错误模式签名。"""
     text = (text or "").strip()
     if not text:
@@ -216,7 +230,7 @@ def _memory_error_pattern(text: str) -> str:
     return text[:500]
 
 
-def _structural_tokens(pattern: str) -> set[str]:
+def _legacy_structural_tokens(pattern: str) -> set[str]:
     """把错误模式里的约束压成结构 token：关系符/递归/求和/常量/乘积。"""
     frags = re.findall(r"(?:expected|implemented)\s*=\s*([^|]+)", (pattern or ""))
     if not frags:
@@ -248,7 +262,7 @@ def _structural_tokens(pattern: str) -> set[str]:
     return toks
 
 
-def _constraint_skeleton(frag: str) -> str:
+def _legacy_constraint_skeleton(frag: str) -> str:
     """把一条约束表达式规范化成骨架：变量名→x、数字→C、时序下标→[prev]/[cur]。"""
     s = (frag or "").lower()
     s = re.sub(r"\[\s*t\s*-\s*1\s*\]", "\u00a7P\u00a7", s)
@@ -259,7 +273,7 @@ def _constraint_skeleton(frag: str) -> str:
     return re.sub(r"\s+", "", s)
 
 
-def _structural_skeletons(pattern: str) -> set[str]:
+def _legacy_structural_skeletons(pattern: str) -> set[str]:
     """抽出 expected=/implemented= 约束片段的完整骨架集合。"""
     frags = re.findall(r"(?:expected|implemented)\s*=\s*([^|]+)", (pattern or ""))
     if not frags:
@@ -271,6 +285,22 @@ def _structural_skeletons(pattern: str) -> set[str]:
             continue
         out.add(_constraint_skeleton(f))
     return out
+
+
+def _memory_error_pattern(text: str) -> str:
+    return _package_memory_error_pattern(text)
+
+
+def _structural_tokens(pattern: str) -> set[str]:
+    return _package_structural_tokens(pattern)
+
+
+def _constraint_skeleton(fragment: str) -> str:
+    return _package_constraint_skeleton(fragment)
+
+
+def _structural_skeletons(pattern: str) -> set[str]:
+    return _package_structural_skeletons(pattern)
 
 
 class RepairMemory:
@@ -527,7 +557,7 @@ def _get_migrated_hints(problem_class: str) -> str:
         if h:
             migrated.append(f"[Migrated from {related}]:\n{h}")
     return "\n\n".join(migrated)
-def _self_diagnose(problem_text: str, code: str, call_llm_func) -> str:
+def _legacy_self_diagnose(problem_text: str, code: str, call_llm_func) -> str:
     """第 1+2 层：三次独立诊断，取交集"""
     prompt = f"""You are an OR expert. Analyze the optimization problem and its generated code.
 
@@ -624,7 +654,7 @@ Return JSON only:
             lines.append(f"    reason: {c['reason']}")
     return "\n".join(lines)
 
-def _verify_self_diagnosis(problem_text: str, code: str, hint: str, call_llm_func) -> dict:
+def _legacy_verify_self_diagnosis(problem_text: str, code: str, hint: str, call_llm_func) -> dict:
     """第 3 层：审计器独立验证自我诊断的假设"""
     prompt = f"""A hypothesis has been raised about missing constraints.
 Verify each constraint INDEPENDENTLY. Do NOT assume the hypothesis is correct.
@@ -656,6 +686,30 @@ Return JSON only:
     if "error" in result:
         return {"all_valid": False, "reason": "verification failed"}
     return result
+
+
+def _self_diagnose(problem_text: str, code: str, call_llm_func) -> str:
+    """Compatibility wrapper for consensus self diagnosis."""
+    return _package_self_diagnose(
+        problem_text,
+        code,
+        lambda prompt: _ask_json(call_llm_func, prompt),
+    )
+
+
+def _verify_self_diagnosis(
+    problem_text: str,
+    code: str,
+    hint: str,
+    call_llm_func,
+) -> dict:
+    """Compatibility wrapper for independent self-diagnosis verification."""
+    return _package_verify_self_diagnosis(
+        problem_text,
+        code,
+        hint,
+        lambda prompt: _ask_json(call_llm_func, prompt),
+    )
 
 # ============================================================
 # 1. 难度检测与动态轮次控制
@@ -752,7 +806,7 @@ _EQUIV_NEEDS_MAPPING = {
 }
 
 
-def _verify_equivalence(
+def _legacy_verify_equivalence(
     problem_text: str,
     code: str,
     expected_constraints: list[dict[str, Any]],
@@ -828,7 +882,7 @@ Return JSON only:
     return _ask_json_retry(call_llm_func, prompt)
 
 
-def _equivalence_ok(result: dict[str, Any], differences: list[dict[str, Any]]) -> bool:
+def _legacy_equivalence_ok(result: dict[str, Any], differences: list[dict[str, Any]]) -> bool:
     """严格校验等价性复核结果；任何不确定都按不通过处理。"""
     if not isinstance(result, dict) or result.get("all_equivalent") is not True:
         return False
@@ -859,6 +913,33 @@ def _equivalence_ok(result: dict[str, Any], differences: list[dict[str, Any]]) -
         if category in _EQUIV_NEEDS_MAPPING and not str(item.get("mapping", "")).strip():
             return False
     return len(seen) == len(differences)
+
+
+def _verify_equivalence(
+    problem_text: str,
+    code: str,
+    expected_constraints: list[dict[str, Any]],
+    implemented_constraints: list[dict[str, Any]],
+    differences: list[dict[str, Any]],
+    call_llm_func,
+) -> dict[str, Any]:
+    """Compatibility wrapper for the package equivalence verifier."""
+    return _package_verify_equivalence(
+        problem_text,
+        code,
+        expected_constraints,
+        implemented_constraints,
+        differences,
+        lambda prompt: _ask_json_retry(call_llm_func, prompt),
+    )
+
+
+def _equivalence_ok(
+    result: dict[str, Any],
+    differences: list[dict[str, Any]],
+) -> bool:
+    """Compatibility wrapper for strict equivalence-result validation."""
+    return _package_equivalence_ok(result, differences)
 
 
 # ============================================================
