@@ -60,6 +60,8 @@ ir_repair_agent/audit/self_diagnosis.py
 ir_repair_agent/memory_features.py
 ir_repair_agent/memory_inmemory.py
 ir_repair_agent/memory_admission.py
+ir_repair_agent/repair_gate.py
+ir_repair_agent/repair_patcher.py
 ir_repair_agent/verification.py
 ```
 
@@ -74,14 +76,17 @@ implementation, including bucketing, similarity, confidence filtering, A/B
 tier ordering, B-tier limits, and case export/load.
 SQLite repair-memory admission now delegates to an auditable policy object
 that reports missing, failed, and untrusted verification checks.
+The legacy healing pipeline now delegates candidate accept/reject/provisional
+decisions and final safe-fallback selection to `repair_gate.py`.
+Repair prompt construction and LLM patch extraction now live in
+`repair_patcher.py`; the prompt includes compact-formulation and
+goal-programming constraints.
 
 Still planned:
 
 ```text
  audit/hybrid_auditor.py
 repair/pipeline.py
-repair/patcher.py
-repair/gate.py
 ```
 
 The gate must remain independent of the standard answer. Oracle-visible logic

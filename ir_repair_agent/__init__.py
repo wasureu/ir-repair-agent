@@ -47,6 +47,18 @@ from .memory_admission import (
     assess_memory_admission,
 )
 from .repair import RepairEngine, RepairOutcome, RepairPolicy, RepairRequest
+from .repair_gate import (
+    GateDecision,
+    assess_candidate,
+    objective_improved,
+    objective_nochange,
+    select_final_fallback,
+)
+from .repair_patcher import (
+    RepairPromptContext,
+    build_repair_prompt,
+    repair_code,
+)
 
 __all__ = [
     "BudgetExceeded",
@@ -61,6 +73,7 @@ __all__ = [
     "ExperimentConfig",
     "ExperimentRecord",
     "FailureDiagnosis",
+    "GateDecision",
     "IRPatch",
     "LinearExpression",
     "LinearTerm",
@@ -75,6 +88,7 @@ __all__ = [
     "RepairOutcome",
     "RepairPolicy",
     "RepairRequest",
+    "RepairPromptContext",
     "SetSpec",
     "SolverEvidence",
     "SqliteRepairMemory",
@@ -83,15 +97,21 @@ __all__ = [
     "VariableSpec",
     "VariableEvidence",
     "assess_edit",
+    "assess_candidate",
     "assess_memory_admission",
+    "build_repair_prompt",
     "compare_runs",
     "collect_gurobi_evidence",
     "constraint_skeleton",
     "diagnosis_from_validation",
     "memory_error_pattern",
     "normalize_class",
+    "objective_improved",
+    "objective_nochange",
     "safe_float",
+    "select_final_fallback",
     "structural_skeletons",
     "structural_tokens",
+    "repair_code",
 ]
 

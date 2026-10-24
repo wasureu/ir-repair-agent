@@ -37,6 +37,14 @@ from ir_repair_agent.memory_features import (
 from ir_repair_agent.memory_inmemory import (
     RepairMemory as _PackageRepairMemory,
 )
+from ir_repair_agent.repair_gate import (
+    assess_candidate as _package_assess_candidate,
+    GateDecision as _PackageGateDecision,
+    objective_improved as _package_objective_improved,
+    objective_nochange as _package_objective_nochange,
+    select_final_fallback as _package_select_final_fallback,
+)
+from ir_repair_agent.repair_patcher import repair_code as _package_repair_code
 from ir_repair_agent.verification import regression_issues as _package_regression
 
 # 从 hints 模块导入领域知识字典
@@ -1286,7 +1294,7 @@ This information is used by the repair module to fix the code, so be specific.
 # 5. 修复函数
 # ============================================================
 
-def repair_code(
+def _legacy_repair_code(
     original_code: str,
     audit_result: str,
     problem_text: str,
@@ -1367,6 +1375,34 @@ Traceback / Error:
     response = str(call_llm_func(prompt))
     match = re.search(r"```python\s*(.*?)\s*```", response, re.S | re.I)
     return match.group(1) if match else response.strip()
+
+
+def repair_code(
+    original_code: str,
+    audit_result: str,
+    problem_text: str,
+    call_llm_func,
+    execution_error: str = "",
+    problem_class: str = "unknown",
+    extra_hint: str = "",
+    historical_cases: list[dict] | None = None,
+) -> str:
+    """Legacy-compatible wrapper for the package repair patcher."""
+    normalized_class = _normalize_class(problem_class)
+    hint = "" if _DISABLE_HINTS else REPAIR_HINTS.get(normalized_class, "")
+    if not hint and extra_hint and not _DISABLE_HINTS:
+        hint = extra_hint
+    return _package_repair_code(
+        original_code,
+        audit_result,
+        problem_text,
+        call_llm_func,
+        execution_error=execution_error,
+        problem_class=problem_class,
+        hint=hint,
+        historical_cases=historical_cases,
+        memory_enabled=not _DISABLE_MEMORY,
+    )
 
 
 # ============================================================
@@ -1540,22 +1576,13 @@ def _objective_improved(direction: str, current: float, candidate: float,
     返回 True 表示改善，False 表示未改善，None 表示方向未知、
     无法给出单调性证据（此时由调用方决定是否仅凭可执行性接受）。
     """
-    direction = (direction or "unknown").lower()
-    scale = max(abs(float(current)), 1.0)
-    threshold = max(float(tolerance), 1e-9) * scale
-    if direction == "min":
-        return float(candidate) < float(current) - threshold
-    if direction == "max":
-        return float(candidate) > float(current) + threshold
-    return None
+    return _package_objective_improved(direction, current, candidate, tolerance)
 
 
 def _objective_nochange(current: float, candidate: float,
                         tolerance: float) -> bool:
     """目标值在相对容差内视为无变化（数值抖动，而非改善/恶化证据）。"""
-    scale = max(abs(float(current)), 1.0)
-    threshold = max(float(tolerance), 1e-9) * scale
-    return abs(float(candidate) - float(current)) <= threshold
+    return _package_objective_nochange(current, candidate, tolerance)
 
 
 def _regression_issues(previous_code: str, previous_evidence: dict[str, Any],
@@ -2110,103 +2137,42 @@ def run_healing_pipeline(
                     direction_evidence = _fuse_direction_evidence(
                         problem_objective, repaired, report
                     )
-                    direction = direction_evidence["direction"]
-                    direction_confidence = direction_evidence["confidence"]
-                    if direction_confidence == "conflict":
-                        print(" ⚠️ 目标方向证据冲突，保留上一版")
+                    decision = _package_assess_candidate(
+                        previous_exec_success=cur_success,
+                        previous_objective=cur_obj,
+                        candidate_objective=new_obj,
+                        direction_evidence=direction_evidence,
+                        regression=regression,
+                        tolerance=objective_tolerance,
+                    )
+                    if decision.action == "accept" and regression_warnings:
+                        decision = _PackageGateDecision(
+                            "provisional_accept",
+                            "objective improved with structural regression warnings",
+                            decision.evidence,
+                        )
+                    evidence = dict(decision.evidence)
+                    evidence["previous_solver_evidence"] = _solver_summary(current_code)
+                    evidence["candidate_solver_evidence"] = _solver_summary(repaired)
+                    if decision.action == "reject":
+                        print(f" ⚠️ 第 {round_number} 轮修复被 gate 拒绝，保留上一版")
                         _log_gate_decision(
                             question_id, problem_class, round_number,
                             "reverse_validation", "reject",
-                            "conflicting objective direction evidence",
-                            direction_evidence,
+                            decision.reason,
+                            evidence,
                         )
                         continue
-                    improved = (
-                        _objective_improved(
-                            direction, cur_obj, new_obj, objective_tolerance
-                        )
-                        if direction_confidence in {"high", "medium"}
-                        else None
-                    )
-                    if improved is False:
-                        if _objective_nochange(
-                            cur_obj, new_obj, objective_tolerance
-                        ):
-                            print(f" ✓ 第 {round_number} 轮目标值未明显变化，"
-                                  "临时接受并进入下一轮审计")
-                            _log_gate_decision(
-                                question_id, problem_class, round_number,
-                                "reverse_validation", "provisional_accept",
-                                "objective unchanged within tolerance",
-                                {
-                                    "previous_objective": cur_obj,
-                                    "candidate_objective": new_obj,
-                                    "direction_evidence": direction_evidence,
-                                    "previous_solver_evidence": _solver_summary(current_code),
-                                    "candidate_solver_evidence": _solver_summary(repaired),
-                                },
-                            )
-                        else:
-                            print(f" ⚠️ 第 {round_number} 轮修复未沿 "
-                                  f"{direction} 方向改善，保留上一版")
-                            _log_gate_decision(
-                                question_id, problem_class, round_number,
-                                "reverse_validation", "reject",
-                                f"objective not improved for {direction}",
-                                {
-                                    "previous_objective": cur_obj,
-                                    "candidate_objective": new_obj,
-                                    "direction_evidence": direction_evidence,
-                                    "previous_solver_evidence": _solver_summary(current_code),
-                                    "candidate_solver_evidence": _solver_summary(repaired),
-                                },
-                            )
-                            continue
-                    if improved is True:
-                        if regression_warnings:
-                            print(" ✓ 目标值改善，但存在结构回归警告，临时接受")
-                            _log_gate_decision(
-                                question_id, problem_class, round_number,
-                                "reverse_validation", "provisional_accept",
-                                "objective improved with structural regression warnings",
-                                {
-                                    "previous_objective": cur_obj,
-                                    "candidate_objective": new_obj,
-                                    "direction_evidence": direction_evidence,
-                                    "regression": regression,
-                                    "previous_solver_evidence": _solver_summary(current_code),
-                                    "candidate_solver_evidence": _solver_summary(repaired),
-                                },
-                            )
-                        else:
-                            print(f" ✓ 第 {round_number} 轮修复沿 {direction} 方向改善")
-                            _log_gate_decision(
-                                question_id, problem_class, round_number,
-                                "reverse_validation", "accept",
-                                f"objective improved for {direction}",
-                                {
-                                    "previous_objective": cur_obj,
-                                    "candidate_objective": new_obj,
-                                    "direction_evidence": direction_evidence,
-                                    "regression": regression,
-                                    "previous_solver_evidence": _solver_summary(current_code),
-                                    "candidate_solver_evidence": _solver_summary(repaired),
-                                },
-                            )
+                    if decision.action == "accept":
+                        print(f" ✓ 第 {round_number} 轮修复通过 gate")
                     else:
-                        print(f" ✓ 第 {round_number} 轮修复可执行（方向证据不足，临时接受）")
-                        _log_gate_decision(
-                            question_id, problem_class, round_number,
-                            "reverse_validation", "provisional_accept",
-                            "execution evidence only; objective direction evidence insufficient",
-                            {
-                                "previous_objective": cur_obj,
-                                "candidate_objective": new_obj,
-                                "direction_evidence": direction_evidence,
-                                "previous_solver_evidence": _solver_summary(current_code),
-                                "candidate_solver_evidence": _solver_summary(repaired),
-                            },
-                        )
+                        print(f" ✓ 第 {round_number} 轮修复 provisional 接受")
+                    _log_gate_decision(
+                        question_id, problem_class, round_number,
+                        "reverse_validation", decision.action,
+                        decision.reason,
+                        evidence,
+                    )
             else:
                 # 上一版跑不起来，新版本能跑 → 接受
                 print(f" ✓ 第 {round_number} 轮修复后代码首次可执行")
@@ -2224,11 +2190,14 @@ def run_healing_pipeline(
 
     # 无 oracle 的最终保护：最后一轮候选未获验证时，
     # 回退到最后一次通过独立/严格验证的代码，避免交付更差版本。
-    fallback_code = last_verified_code or execution_baseline_code
-    if (not _ORACLE_GATE
-            and fallback_code is not None
-            and fallback_code.strip() != current_code.strip()
-            and not report.startswith(("PASS", "PASS_EQUIVALENT"))):
+    fallback_code, fallback_source = _package_select_final_fallback(
+        current_code=current_code,
+        last_verified_code=last_verified_code,
+        execution_baseline_code=execution_baseline_code,
+        final_audit=report,
+        oracle_gate=_ORACLE_GATE,
+    )
+    if fallback_code is not None:
         print(" ⚠️ 达到最大轮数且最后候选未验证，回退到安全基线")
         _log_gate_decision(
             question_id, problem_class, max_rounds,
@@ -2238,9 +2207,7 @@ def run_healing_pipeline(
                 "final_audit": report[:300],
                 "current_solver_evidence": _solver_summary(current_code),
                 "fallback_solver_evidence": _solver_summary(fallback_code),
-                "fallback_source": (
-                    "last_verified" if last_verified_code else "execution_baseline"
-                ),
+                "fallback_source": fallback_source,
             },
         )
         current_code = fallback_code
