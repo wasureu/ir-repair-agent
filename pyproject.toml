@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ir-repair-agent"
+version = "0.1.0"
+description = "Verification-gated repair and memory for LLM optimization modeling"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+runtime = [
+  "gurobipy>=11.0",
+  "httpx>=0.27",
+  "openai>=1.40",
+  "tqdm>=4.66",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+ir-repair-run = "ir_repair_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ir_repair_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

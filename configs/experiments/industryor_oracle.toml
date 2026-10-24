@@ -1,0 +1,16 @@
+[run]
+input_path = "logs/industryor_cases6.jsonl"
+output_path = "runs/industryor_cases6_oracle/results.jsonl"
+initial_codes_file = "logs/industryor_cases6_initial_codes.json"
+model = "deepseek-v4-flash"
+max_workers = 2
+seed = 1
+no_healing = false
+stdout_path = "runs/industryor_cases6_oracle/stdout.log"
+
+[env]
+ORACLE_GATE = "1"
+AUDIT_EQUIV = "1"
+DISABLE_MEMORY = "1"
+GATE_LOG = "1"
+GATE_LOG_PATH = "runs/industryor_cases6_oracle/gate_log.jsonl"

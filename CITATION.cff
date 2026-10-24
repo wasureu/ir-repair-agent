@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite the accompanying paper."
+title: "IR Repair Agent"
+type: software
+version: 0.1.0
+authors:
+  - family-names: "TODO"
+    given-names: "TODO"
+repository-code: "TODO"
+license: "TODO"
