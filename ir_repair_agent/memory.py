@@ -16,6 +16,7 @@ from .contracts import (
     PatchOperation,
     ValidationResult,
 )
+from .memory_admission import assess_memory_admission
 
 DEFAULT_VERIFICATION_CHECKS = (
     "model_build",
@@ -245,11 +246,16 @@ class SqliteRepairMemory:
         Invalid, LLM-only, or partially successful evidence is rejected. This
         is an explicit anti-contamination boundary.
         """
-        if not validation.hard_pass(
+        admission = assess_memory_admission(
+            validation,
             self.required_checks,
             require_program_evidence=True,
-        ):
-            raise ValueError("validation does not meet verified-memory admission policy")
+        )
+        if not admission.admitted:
+            raise ValueError(
+                "validation does not meet verified-memory admission policy: "
+                + admission.reason
+            )
         template = self._make_template(patch, diagnosis)
         source_fingerprint = source_model.fingerprint()
         case_id = _case_id(
@@ -258,16 +264,7 @@ class SqliteRepairMemory:
             patch=template,
         )
         created_at = time.time() if now is None else float(now)
-        verified_checks = tuple(
-            sorted(
-                {
-                    check.name
-                    for check in validation.checks
-                    if check.status == "PASS"
-                    and check.source in {"program", "solver", "metamorphic"}
-                }
-            )
-        )
+        verified_checks = admission.verified_checks
         with self._lock, self._connection:
             cursor = self._connection.execute(
                 """

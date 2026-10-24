@@ -34,6 +34,9 @@ from ir_repair_agent.memory_features import (
     structural_skeletons as _package_structural_skeletons,
     structural_tokens as _package_structural_tokens,
 )
+from ir_repair_agent.memory_inmemory import (
+    RepairMemory as _PackageRepairMemory,
+)
 from ir_repair_agent.verification import regression_issues as _package_regression
 
 # 从 hints 模块导入领域知识字典
@@ -303,7 +306,7 @@ def _structural_skeletons(pattern: str) -> set[str]:
     return _package_structural_skeletons(pattern)
 
 
-class RepairMemory:
+class _LegacyRepairMemory:
     """跨题修复记忆：修复成功后存储一条经验，修复前按同类型检索 top-k。
 
     存储字段：problem_class / error_pattern / original_snippet / repaired_snippet。
@@ -505,6 +508,15 @@ class RepairMemory:
         key = _normalize_class(problem_class)
         with self._lock:
             return len(self._buckets.get(key, []))
+
+
+class RepairMemory(_PackageRepairMemory):
+    """Legacy-compatible wrapper around the package in-memory memory."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("enabled", not _DISABLE_MEMORY)
+        kwargs.setdefault("store_logger", _log_memory_store)
+        super().__init__(*args, **kwargs)
 
 
 def _return_pass(memory, problem_class, first_error_pattern,

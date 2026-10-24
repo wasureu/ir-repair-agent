@@ -58,6 +58,8 @@ ir_repair_agent/audit/direction.py
 ir_repair_agent/audit/equivalence.py
 ir_repair_agent/audit/self_diagnosis.py
 ir_repair_agent/memory_features.py
+ir_repair_agent/memory_inmemory.py
+ir_repair_agent/memory_admission.py
 ir_repair_agent/verification.py
 ```
 
@@ -67,6 +69,11 @@ solver-regression checks to these package modules. The three-run consensus
 self-diagnosis and its independent verification are also delegated.
 Legacy repair-memory error compression and structural/skeleton features now
 delegate to `memory_features.py`.
+The legacy `RepairMemory` is a compatibility wrapper over the package
+implementation, including bucketing, similarity, confidence filtering, A/B
+tier ordering, B-tier limits, and case export/load.
+SQLite repair-memory admission now delegates to an auditable policy object
+that reports missing, failed, and untrusted verification checks.
 
 Still planned:
 
@@ -75,7 +82,6 @@ Still planned:
 repair/pipeline.py
 repair/patcher.py
 repair/gate.py
-memory/admission.py
 ```
 
 The gate must remain independent of the standard answer. Oracle-visible logic

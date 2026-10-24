@@ -40,6 +40,12 @@ from .memory_features import (
     structural_skeletons,
     structural_tokens,
 )
+from .memory_inmemory import RepairMemory, normalize_class
+from .memory_admission import (
+    AdmissionDecision,
+    TRUSTED_PROGRAM_SOURCES,
+    assess_memory_admission,
+)
 from .repair import RepairEngine, RepairOutcome, RepairPolicy, RepairRequest
 
 __all__ = [
@@ -47,6 +53,7 @@ __all__ = [
     "BudgetLedger",
     "BudgetLimits",
     "BudgetSnapshot",
+    "AdmissionDecision",
     "CheckEvidence",
     "ConstraintSpec",
     "ConstraintEvidence",
@@ -63,6 +70,7 @@ __all__ = [
     "PatchOperation",
     "QuadraticTerm",
     "RepairCase",
+    "RepairMemory",
     "RepairEngine",
     "RepairOutcome",
     "RepairPolicy",
@@ -70,15 +78,18 @@ __all__ = [
     "SetSpec",
     "SolverEvidence",
     "SqliteRepairMemory",
+    "TRUSTED_PROGRAM_SOURCES",
     "ValidationResult",
     "VariableSpec",
     "VariableEvidence",
     "assess_edit",
+    "assess_memory_admission",
     "compare_runs",
     "collect_gurobi_evidence",
     "constraint_skeleton",
     "diagnosis_from_validation",
     "memory_error_pattern",
+    "normalize_class",
     "safe_float",
     "structural_skeletons",
     "structural_tokens",
