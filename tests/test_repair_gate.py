@@ -76,6 +76,17 @@ class RepairGateTests(unittest.TestCase):
             "initial",
         )
 
+    def test_pass_equivalent_does_not_block_fallback(self):
+        fallback, source = select_final_fallback(
+            current_code="bad",
+            last_verified_code=None,
+            execution_baseline_code="initial",
+            final_audit="PASS_EQUIVALENT",
+            oracle_gate=False,
+        )
+        self.assertEqual(fallback, "initial")
+        self.assertEqual(source, "execution_baseline")
+
 
 if __name__ == "__main__":
     unittest.main()

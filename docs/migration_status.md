@@ -56,6 +56,8 @@ Completed modules:
 ```text
 ir_repair_agent/audit/direction.py
 ir_repair_agent/audit/equivalence.py
+ir_repair_agent/audit/hybrid_auditor.py
+ir_repair_agent/audit/objective_witness.py
 ir_repair_agent/audit/self_diagnosis.py
 ir_repair_agent/memory_features.py
 ir_repair_agent/memory_inmemory.py
@@ -65,7 +67,8 @@ ir_repair_agent/repair_patcher.py
 ir_repair_agent/verification.py
 ```
 
-The legacy auditor currently delegates multi-source objective-direction
+The legacy auditor currently delegates three-stage audit orchestration,
+schema/coverage hard checks, multi-source objective-direction
 evidence, equivalence verification, strict equivalence-result validation, and
 solver-regression checks to these package modules. The three-run consensus
 self-diagnosis and its independent verification are also delegated.
@@ -78,14 +81,21 @@ SQLite repair-memory admission now delegates to an auditable policy object
 that reports missing, failed, and untrusted verification checks.
 The legacy healing pipeline now delegates candidate accept/reject/provisional
 decisions and final safe-fallback selection to `repair_gate.py`.
+It also performs a post-loop strict audit when the final accepted candidate
+was generated in the last repair round and therefore had not yet been audited.
 Repair prompt construction and LLM patch extraction now live in
 `repair_patcher.py`; the prompt includes compact-formulation and
 goal-programming constraints.
+Equivalent unchanged code now also passes an objective-variable witness:
+Python extracts symbols used by `setObjective`, while the semantic layer
+supplies required/forbidden variable families for a hard consistency check.
+The same witness is applied to unchanged code that receives a strict PASS.
+Post-loop `PASS_EQUIVALENT` is not treated as terminal and cannot bypass the
+safe fallback.
 
 Still planned:
 
 ```text
- audit/hybrid_auditor.py
 repair/pipeline.py
 ```
 

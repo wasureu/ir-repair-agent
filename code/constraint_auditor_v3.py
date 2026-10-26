@@ -24,9 +24,16 @@ from ir_repair_agent.audit.equivalence import (
     equivalence_ok as _package_equivalence_ok,
     verify_equivalence as _package_verify_equivalence,
 )
+from ir_repair_agent.audit.hybrid_auditor import (
+    AuditDependencies as _PackageAuditDependencies,
+    audit_logic_hybrid as _package_audit_logic_hybrid,
+)
 from ir_repair_agent.audit.self_diagnosis import (
     self_diagnose as _package_self_diagnose,
     verify_self_diagnosis as _package_verify_self_diagnosis,
+)
+from ir_repair_agent.audit.objective_witness import (
+    verify_objective_witness as _package_verify_objective_witness,
 )
 from ir_repair_agent.memory_features import (
     constraint_skeleton as _package_constraint_skeleton,
@@ -1041,7 +1048,7 @@ def _report(audit: dict[str, Any]) -> str:
 # 4. 核心审计函数（三阶段）
 # ============================================================
 
-def audit_logic_hybrid(
+def _legacy_audit_logic_hybrid(
     problem_text: str,
     code: str,
     exec_output: str,
@@ -1288,6 +1295,47 @@ This information is used by the repair module to fix the code, so be specific.
         print(f" 🔁 equivalence verifier rejected: {equiv.get('error', 'not all differences equivalent')}")
 
     return _report(audit)
+
+
+def audit_logic_hybrid(
+    problem_text: str,
+    code: str,
+    exec_output: str,
+    initial_modeling_logic: str | None,
+    call_llm_func,
+    problem_class: str = "unknown",
+) -> str:
+    """Legacy-compatible wrapper around the package hybrid auditor."""
+    dependencies = _PackageAuditDependencies(
+        hints=AUDIT_HINTS,
+        hint_cache=_get_hint_cache(),
+        normalize_class=_normalize_class,
+        migrated_hints=_get_migrated_hints,
+        ask_json_retry=lambda prompt: _ask_json_retry(call_llm_func, prompt),
+        self_diagnose=lambda text, candidate: _self_diagnose(
+            text, candidate, call_llm_func
+        ),
+        verify_self_diagnosis=lambda text, candidate, hint: _verify_self_diagnosis(
+            text, candidate, hint, call_llm_func
+        ),
+        harvest_audit=_harvest_audit,
+        verify_equivalence=lambda **kwargs: _verify_equivalence(
+            call_llm_func=call_llm_func,
+            **kwargs,
+        ),
+        equivalence_ok=_equivalence_ok,
+    )
+    return _package_audit_logic_hybrid(
+        problem_text,
+        code,
+        exec_output,
+        initial_modeling_logic,
+        dependencies,
+        problem_class=problem_class,
+        hints_enabled=not _DISABLE_HINTS,
+        audit_equiv_enabled=_AUDIT_EQUIV,
+        hint_harvest_enabled=_HINT_HARVEST,
+    )
 
 
 # ============================================================
@@ -1724,6 +1772,7 @@ def run_healing_pipeline(
     # ★ 记录“最初为什么错”的签名，最终 PASS 时作为入库的检索键
     first_error_pattern = _memory_error_pattern(initial_execution_error or "")
     last_verified_code: str | None = None
+    last_audited_code: str | None = None
 
     for round_number in range(1, max_rounds + 1):
         rounds_used = round_number
@@ -1741,6 +1790,7 @@ def run_healing_pipeline(
                 initial_modeling_logic, call_llm_func,
                 problem_class=problem_class,
             )
+            last_audited_code = current_code.strip()
 
             # REVIEW 分流：题目侧不确定 → 直接返回；代码侧不确定 → 进修复
             if report.startswith("REVIEW:"):
@@ -1827,16 +1877,39 @@ def run_healing_pipeline(
                     problem_text, current_code, call_llm_func
                 )
                 if verdict == "PASS":
-                    last_verified_code = current_code
+                    witness = _package_verify_objective_witness(
+                        problem_text,
+                        current_code,
+                        lambda prompt: _ask_json(call_llm_func, prompt),
+                    )
                     _log_gate_decision(
                         question_id, problem_class, round_number,
-                        "independent_verify", "accept",
-                        "unchanged code passed equivalence audit and independent verifier",
+                        "objective_witness",
+                        "accept" if witness.verdict == "PASS" else "reject",
+                        witness.reason,
                         {
                             "verifier_reason": reason,
                             "solver_evidence": _solver_summary(current_code),
+                            "objective_witness": witness.as_dict(),
                         },
                     )
+                    if witness.verdict != "PASS":
+                        print(" ⚠️ 目标变量族见证未通过，继续修复")
+                        report = (
+                            f"FAIL: objective witness {witness.verdict}: "
+                            + witness.reason
+                        )
+                    else:
+                        last_verified_code = current_code
+                        _log_gate_decision(
+                            question_id, problem_class, round_number,
+                            "independent_verify", "accept",
+                            "unchanged code passed equivalence audit and independent verifier",
+                            {
+                                "verifier_reason": reason,
+                                "solver_evidence": _solver_summary(current_code),
+                            },
+                        )
                 else:
                     _log_gate_decision(
                         question_id, problem_class, round_number,
@@ -1911,6 +1984,28 @@ def run_healing_pipeline(
                     continue
 
                 if not _ORACLE_GATE or ground_truth is None:
+                    if (
+                        report == "PASS"
+                        and current_code.strip() == initial_code.strip()
+                    ):
+                        witness = _package_verify_objective_witness(
+                            problem_text,
+                            current_code,
+                            lambda prompt: _ask_json(call_llm_func, prompt),
+                        )
+                        _log_gate_decision(
+                            question_id, problem_class, round_number,
+                            "objective_witness",
+                            "accept" if witness.verdict == "PASS" else "reject",
+                            witness.reason,
+                            {"objective_witness": witness.as_dict()},
+                        )
+                        if witness.verdict != "PASS":
+                            report = (
+                                f"FAIL: objective witness {witness.verdict}: "
+                                + witness.reason
+                            )
+                            continue
                     last_verified_code = current_code
                     print(f" ✅ 第 {round_number} 轮审计通过，执行成功")
                     _log_gate_decision(
@@ -2187,6 +2282,51 @@ def run_healing_pipeline(
                 )
 
         current_code = repaired
+
+    # 最后一轮修复可能生成从未被审计的新候选。若达到最大轮数后
+    # current_code 已变化，给它一次最终严格审计机会，再做安全回退判断。
+    if (
+        not _ORACLE_GATE
+        and current_code.strip() != (last_audited_code or "").strip()
+    ):
+        final_audit_report = audit_logic_hybrid(
+            problem_text,
+            current_code,
+            "",
+            initial_modeling_logic,
+            call_llm_func,
+            problem_class=problem_class,
+        )
+        last_audited_code = current_code.strip()
+        if final_audit_report == "PASS":
+            final_success, final_objective, final_error = _invoke_executor(
+                execute_code_func, current_code
+            )
+            if final_success and final_objective is not None:
+                _log_gate_decision(
+                    question_id, problem_class, max_rounds + 1,
+                    "final_audit", "accept",
+                    "post-loop strict audit passed and candidate executes",
+                    {"solver_evidence": _solver_summary(current_code)},
+                )
+                return _return_pass(
+                    memory, problem_class, first_error_pattern,
+                    initial_code, current_code, max_rounds + 1, difficulty,
+                    verified_by="audit_pass", confidence=1.0,
+                    question_id=question_id,
+                )
+            final_audit_report = (
+                "FAIL: post-loop strict audit passed but execution failed. "
+                f"{final_error}"
+            )
+        _log_gate_decision(
+            question_id, problem_class, max_rounds + 1,
+            "final_audit",
+            "accept" if final_audit_report == "PASS" else "reject",
+            final_audit_report[:500],
+            {"solver_evidence": _solver_summary(current_code)},
+        )
+        report = final_audit_report
 
     # 无 oracle 的最终保护：最后一轮候选未获验证时，
     # 回退到最后一次通过独立/严格验证的代码，避免交付更差版本。

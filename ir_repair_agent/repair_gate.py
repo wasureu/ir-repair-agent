@@ -142,7 +142,10 @@ def select_final_fallback(
     final_audit: str,
     oracle_gate: bool,
 ) -> tuple[str | None, str]:
-    if oracle_gate or final_audit.startswith(("PASS", "PASS_EQUIVALENT")):
+    # Only a strict PASS is a terminal post-loop audit result. PASS_EQUIVALENT
+    # still requires the oracle-free acceptance checks and must not bypass
+    # the safe baseline fallback.
+    if oracle_gate or final_audit.strip() == "PASS":
         return None, ""
     if (
         last_verified_code is not None
