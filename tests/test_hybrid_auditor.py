@@ -1,6 +1,7 @@
 import io
 import unittest
 from contextlib import redirect_stdout
+from unittest import mock
 
 from ir_repair_agent.audit.hybrid_auditor import (
     AuditDependencies,
@@ -126,6 +127,49 @@ class HybridAuditorTests(unittest.TestCase):
                 problem_class="toy",
             )
         self.assertEqual(result, "PASS_EQUIVALENT")
+
+    def test_self_diagnosis_switch_skips_consensus_calls(self):
+        implemented = {"constraints": [constraint()], "notes": []}
+        expected = {"constraints": [constraint()], "notes": []}
+        comparison = {
+            "verdict": "PASS",
+            "differences": [],
+            "expected_results": [
+                {
+                    "expected_id": "c1",
+                    "implemented_id": "c1",
+                    "status": "MATCHED",
+                }
+            ],
+            "implemented_results": [
+                {
+                    "implemented_id": "c1",
+                    "expected_id": "c1",
+                    "status": "MATCHED",
+                }
+            ],
+            "notes": [],
+        }
+        calls = iter([implemented, expected, comparison])
+        self_diagnose = mock.Mock(return_value="hint")
+        deps = AuditDependencies(
+            ask_json_retry=lambda _prompt: next(calls),
+            normalize_class=str.lower,
+            self_diagnose=self_diagnose,
+            verify_self_diagnosis=lambda *_args: {"all_valid": True},
+        )
+        with redirect_stdout(io.StringIO()):
+            result = audit_logic_hybrid(
+                "problem",
+                "import gurobipy as gp\n" + "x" * 60,
+                "",
+                "",
+                deps,
+                problem_class="toy",
+                self_diagnosis_enabled=False,
+            )
+        self.assertEqual(result, "PASS")
+        self_diagnose.assert_not_called()
 
 
 if __name__ == "__main__":

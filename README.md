@@ -8,9 +8,10 @@ optimization models.
 This repository contains two layers:
 
 - `ir_repair_agent/`: structured ModelIR contracts, evidence, budget,
-  SQLite memory, repair engine, and the new package CLI.
+  SQLite memory, repair engine, evaluator runner, and the new package CLI.
 - `code/`: the operational legacy evaluator and auditor used by the current
-  experiments. It remains import-compatible while migration continues.
+  experiments. It is now a compatibility layer around the package for
+  evaluation, LLM, Gurobi execution, audit, and repair orchestration.
 
 The normal repair path never exposes the reference answer. `ORACLE_GATE=1` is
 reserved for diagnostic upper-bound experiments.

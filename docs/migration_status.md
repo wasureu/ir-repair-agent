@@ -29,25 +29,36 @@ ir_repair_agent/data/dataset.py
 ir_repair_agent/data/frozen_codes.py
 ir_repair_agent/evaluation/scoring.py
 ir_repair_agent/evaluation/metrics.py
+ir_repair_agent/llm/client.py
+ir_repair_agent/execution/gurobi_runner.py
+ir_repair_agent/evaluation/runner.py
 ```
 
 The legacy evaluator now delegates code parsing, numeric-answer parsing,
 problem/frozen-code loading, final scoring tolerance, token subtraction, and
 token aggregation to these modules.
+OpenAI-compatible requests, empty-response retries, reasoning fallback,
+timeout configuration, and usage callbacks now delegate to `llm/client.py`.
+Gurobi environment creation, execution, result caching, solver evidence, and
+IIS collection now delegate to `execution/gurobi_runner.py`.
+The evaluator's prompt-to-code path, frozen-code reuse, healing request
+adapter, fallback execution, thread-local token accounting, incremental JSONL
+writing, initial-code dumping, and metrics now delegate to
+`evaluation/runner.py`.
 
 Still planned:
 
 ```text
-llm/client.py
-evaluation/runner.py
+legacy evaluator method cleanup after WSL parity acceptance
 ```
 
-Remaining golden-output tests must cover:
+The migration tests now cover:
 
 - frozen initial-code loading;
 - no-oracle behavior;
 - token and elapsed-time accounting;
-- incremental JSONL writing.
+- incremental JSONL writing and metrics output;
+- evaluator-to-runner dependency wiring.
 
 ## Phase 3: split the auditor and repair pipeline
 
@@ -95,13 +106,15 @@ supplies required/forbidden variable families for a hard consistency check.
 The same witness is applied to unchanged code that receives a strict PASS.
 Post-loop `PASS_EQUIVALENT` is not treated as terminal and cannot bypass the
 safe fallback.
+Automatic consensus self-diagnosis remains enabled by default as the fallback
+hint path: it runs only when hints are enabled and neither a direct
+`AUDIT_HINTS` entry nor a migrated hint exists. `SELF_DIAGNOSE=0` is reserved
+for the explicit no-auto-diagnosis ablation.
 
 Still planned:
 
 ```text
-llm/client.py
-execution/gurobi_runner.py
-evaluation/runner.py
+remove the temporary `_legacy_*` evaluator methods after end-to-end parity
 ```
 
 The gate must remain independent of the standard answer. Oracle-visible logic

@@ -124,6 +124,7 @@ def audit_logic_hybrid(
     hints_enabled: bool = True,
     audit_equiv_enabled: bool = True,
     hint_harvest_enabled: bool = False,
+    self_diagnosis_enabled: bool = True,
 ) -> str:
     """Run code extraction, problem extraction, and bidirectional comparison."""
     del exec_output
@@ -142,7 +143,7 @@ def audit_logic_hybrid(
         if migrated:
             print(f" 🔄 migrated hint from similar types for {problem_class}")
             hint = migrated
-        elif dependencies.self_diagnose is not None:
+        elif self_diagnosis_enabled and dependencies.self_diagnose is not None:
             self_hint = dependencies.self_diagnose(problem_text, code)
             if self_hint and dependencies.verify_self_diagnosis is not None:
                 print(f" 🔍 self-diagnosis generated hint for {problem_class}")

@@ -84,6 +84,12 @@ _AUDIT_EQUIV = os.environ.get("AUDIT_EQUIV", "0") == "1"
 if _AUDIT_EQUIV:
     print("[audit] equivalence verifier enabled (AUDIT_EQUIV=1)")
 
+# 自动自我诊断是 hint 注入链路的兜底：手工 hints 和迁移 hints 都未命中时，
+# 才执行三采样共识与独立验证。默认保持开启；SELF_DIAGNOSE=0 用于消融。
+_SELF_DIAGNOSE = os.environ.get("SELF_DIAGNOSE", "1") == "1"
+if not _SELF_DIAGNOSE:
+    print("[audit] self-diagnosis disabled (SELF_DIAGNOSE=0)")
+
 # 诊断开关：设置 MEMORY_LOG=1 时，把每次检索的 (类, 轮次, 桶大小, 命中数, 最高分) 追加到文件
 _MEMORY_LOG = os.environ.get("MEMORY_LOG", "0") == "1"
 _MEMORY_LOG_PATH = os.environ.get("MEMORY_LOG_PATH", "memory_retrieval.log")
@@ -1340,6 +1346,7 @@ def audit_logic_hybrid(
         hints_enabled=not _DISABLE_HINTS,
         audit_equiv_enabled=_AUDIT_EQUIV,
         hint_harvest_enabled=_HINT_HARVEST,
+        self_diagnosis_enabled=_SELF_DIAGNOSE,
     )
 
 

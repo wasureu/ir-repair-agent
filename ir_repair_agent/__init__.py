@@ -33,6 +33,13 @@ from .execution_evidence import (
     collect_gurobi_evidence,
     safe_float,
 )
+from .execution import GurobiRunner
+from .evaluation.runner import (
+    EvaluationRunner,
+    HealingOutcome,
+    HealingRequest,
+    TokenUsageTracker,
+)
 from .memory import RepairCase, SqliteRepairMemory
 from .memory_features import (
     constraint_skeleton,
@@ -75,10 +82,14 @@ __all__ = [
     "ConstraintSpec",
     "ConstraintEvidence",
     "EditAudit",
+    "EvaluationRunner",
     "ExperimentConfig",
     "ExperimentRecord",
     "FailureDiagnosis",
     "GateDecision",
+    "GurobiRunner",
+    "HealingOutcome",
+    "HealingRequest",
     "IRPatch",
     "LinearExpression",
     "LinearTerm",
@@ -101,6 +112,7 @@ __all__ = [
     "SolverEvidence",
     "SqliteRepairMemory",
     "TRUSTED_PROGRAM_SOURCES",
+    "TokenUsageTracker",
     "ValidationResult",
     "VariableSpec",
     "VariableEvidence",
