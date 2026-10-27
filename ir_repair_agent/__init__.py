@@ -59,6 +59,11 @@ from .repair_patcher import (
     build_repair_prompt,
     repair_code,
 )
+from .repair_pipeline import (
+    RepairPipeline,
+    RepairPipelineDependencies,
+    RepairPipelineRequest,
+)
 
 __all__ = [
     "BudgetExceeded",
@@ -89,6 +94,9 @@ __all__ = [
     "RepairPolicy",
     "RepairRequest",
     "RepairPromptContext",
+    "RepairPipeline",
+    "RepairPipelineDependencies",
+    "RepairPipelineRequest",
     "SetSpec",
     "SolverEvidence",
     "SqliteRepairMemory",

@@ -52,6 +52,11 @@ from ir_repair_agent.repair_gate import (
     select_final_fallback as _package_select_final_fallback,
 )
 from ir_repair_agent.repair_patcher import repair_code as _package_repair_code
+from ir_repair_agent.repair_pipeline import (
+    RepairPipeline as _PackageRepairPipeline,
+    RepairPipelineDependencies as _PackageRepairPipelineDependencies,
+    RepairPipelineRequest as _PackageRepairPipelineRequest,
+)
 from ir_repair_agent.verification import regression_issues as _package_regression
 
 # 从 hints 模块导入领域知识字典
@@ -1687,7 +1692,7 @@ problem and the code. Return JSON only:
     return "REVIEW", " | ".join(reasons)
 
 
-def run_healing_pipeline(
+def _legacy_run_healing_pipeline(
     problem_text: str,
     initial_code: str,
     initial_modeling_logic: str | None,
@@ -2367,6 +2372,130 @@ def run_healing_pipeline(
     )
     print(f" ⚠️ 达到最大轮数 ({max_rounds})，使用最后版本")
     return current_code, report, max_rounds, difficulty
+
+
+def run_healing_pipeline(
+    problem_text: str,
+    initial_code: str,
+    initial_modeling_logic: str | None,
+    exec_output: str,
+    problem_class: str,
+    size: int,
+    call_llm_func,
+    max_rounds_override: int | None = None,
+    execute_code_func=None,
+    ground_truth: float | None = None,
+    objective_tolerance: float = 1e-6,
+    initial_execution_error: str = "",
+    memory: RepairMemory | None = None,
+    execution_evidence_func=None,
+    question_id: str = "",
+) -> tuple[str, str, int, str]:
+    """Legacy-compatible wrapper around the package repair pipeline."""
+
+    def _solver_evidence(code: str) -> dict[str, Any]:
+        if execution_evidence_func is None:
+            return {}
+        try:
+            return execution_evidence_func(code) or {}
+        except Exception:
+            return {}
+
+    def _memory_top_score(
+        current_memory,
+        error_pattern: str,
+        historical_cases: list[dict[str, Any]],
+    ) -> float:
+        if not historical_cases:
+            return 0.0
+        if current_memory.feature_match == 2:
+            query_tokens = _structural_skeletons(error_pattern)
+            record_tokens = historical_cases[0].get("structural_skeletons", set())
+        elif current_memory.feature_match == 1:
+            query_tokens = _structural_tokens(error_pattern)
+            record_tokens = historical_cases[0].get("structural_tokens", set())
+        else:
+            query_tokens = RepairMemory._tokens(error_pattern)
+            record_tokens = historical_cases[0].get("error_tokens", set())
+        return RepairMemory._similarity(query_tokens, record_tokens)
+
+    def _repair(
+        current_code: str,
+        report: str,
+        problem: str,
+        execution_error: str = "",
+        problem_class: str = "unknown",
+        extra_hint: str = "",
+        historical_cases=None,
+    ) -> str:
+        return repair_code(
+            current_code,
+            report,
+            problem,
+            call_llm_func,
+            execution_error=execution_error,
+            problem_class=problem_class,
+            extra_hint=extra_hint,
+            historical_cases=historical_cases,
+        )
+
+    dependencies = _PackageRepairPipelineDependencies(
+        audit_logic=lambda text, code, output, reference, problem_type: audit_logic_hybrid(
+            text,
+            code,
+            output,
+            reference,
+            call_llm_func,
+            problem_class=problem_type,
+        ),
+        repair_code=_repair,
+        execute_code=execute_code_func,
+        invoke_executor=_invoke_executor,
+        solver_evidence=_solver_evidence,
+        problem_direction=lambda text: _problem_direction_evidence(
+            text, call_llm_func
+        ),
+        fuse_direction=_fuse_direction_evidence,
+        independent_verify=lambda text, code: _independent_verification(
+            text, code, call_llm_func
+        ),
+        objective_witness=lambda text, code: _package_verify_objective_witness(
+            text,
+            code,
+            lambda prompt: _ask_json(call_llm_func, prompt),
+        ),
+        log_gate=_log_gate_decision,
+        memory_error_pattern=_memory_error_pattern,
+        hint_cache=_get_hint_cache(),
+        normalize_class=_normalize_class,
+        detect_difficulty=detect_difficulty,
+        healing_rounds=get_healing_rounds,
+        valid_python=_valid_python,
+        attach_error_context=_attach_error_context,
+        code_direction=_code_objective_direction,
+        return_pass=_return_pass,
+        store_exec_success=_store_exec_success,
+        memory_top_score=_memory_top_score,
+        log_memory=_log_memory_retrieval,
+        memory_log_enabled=_MEMORY_LOG,
+        oracle_gate=_ORACLE_GATE,
+    )
+    return _PackageRepairPipeline(dependencies).run(
+        _PackageRepairPipelineRequest(
+            problem_text=problem_text,
+            initial_code=initial_code,
+            initial_modeling_logic=initial_modeling_logic,
+            exec_output=exec_output,
+            problem_class=problem_class,
+            size=size,
+            question_id=question_id,
+            initial_execution_error=initial_execution_error,
+            ground_truth=ground_truth,
+            objective_tolerance=objective_tolerance,
+            max_rounds_override=max_rounds_override,
+            memory=memory,
+        )
+    )
 
 # ============================================================
 # 8. 导出 API

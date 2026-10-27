@@ -64,6 +64,7 @@ ir_repair_agent/memory_inmemory.py
 ir_repair_agent/memory_admission.py
 ir_repair_agent/repair_gate.py
 ir_repair_agent/repair_patcher.py
+ir_repair_agent/repair_pipeline.py
 ir_repair_agent/verification.py
 ```
 
@@ -86,6 +87,8 @@ was generated in the last repair round and therefore had not yet been audited.
 Repair prompt construction and LLM patch extraction now live in
 `repair_patcher.py`; the prompt includes compact-formulation and
 goal-programming constraints.
+The full audit-repair-gate loop now runs in `RepairPipeline`; the legacy
+`run_healing_pipeline` remains only as a compatibility adapter.
 Equivalent unchanged code now also passes an objective-variable witness:
 Python extracts symbols used by `setObjective`, while the semantic layer
 supplies required/forbidden variable families for a hard consistency check.
@@ -96,7 +99,9 @@ safe fallback.
 Still planned:
 
 ```text
-repair/pipeline.py
+llm/client.py
+execution/gurobi_runner.py
+evaluation/runner.py
 ```
 
 The gate must remain independent of the standard answer. Oracle-visible logic
